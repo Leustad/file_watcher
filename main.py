@@ -4,6 +4,7 @@ import sys
 import time
 from datetime import date
 from shutil import copy2, rmtree
+
 from tqdm import tqdm
 
 SOURCE_DIR = 'E:\\DEEPFREEZE\\'
@@ -33,7 +34,7 @@ def check_empty_dir(directory):
     for (dirpath, dirnames, filenames) in os.walk(directory):
         if len(dirnames) == 0 and len(filenames) == 0 and 'Deleted' not in dirpath:
             rmtree(dirpath)
-            logger.info(f'Removed emty dir: {dirpath}')
+            logger.info(f'Removed emtpy dir: {dirpath}')
 
 
 def add_files(added):
