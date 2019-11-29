@@ -9,10 +9,6 @@ SOURCE_DIR = 'E:\\DEEPFREEZE\\'
 TARGET_1_DIR = '\\\\LEUSTAD-DATA\\Docs\\Personal\\'
 TRASHCAN = '\\\\LEUSTAD-DATA\\Docs\\Personal\\Deleted\\'
 
-# SOURCE_DIR = 'E:\\Development\\Python\\file_watcher\\source\\'
-# TARGET_1_DIR = 'E:\\Development\\Python\\file_watcher\\destination\\'
-# TRASHCAN = "E:\\Development\\Python\\file_watcher\\destination\\Deleted\\"
-
 logger = logging.getLogger('file_watcher')
 logging.basicConfig(filename=f'E:\\Development\\Python\\file_watcher\\logs\\file_watcher.info.{date.today()}.log',
                     filemode='a',
