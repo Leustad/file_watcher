@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 from datetime import date
 from shutil import copy2, rmtree
@@ -10,11 +11,14 @@ TARGET_1_DIR = '\\\\LEUSTAD-DATA\\Docs\\Personal\\'
 TRASHCAN = '\\\\LEUSTAD-DATA\\Docs\\Personal\\Deleted\\'
 
 logger = logging.getLogger('file_watcher')
+handler = logging.StreamHandler(sys.stdout)
+logger.addHandler(handler)
 logging.basicConfig(filename=f'E:\\Development\\Python\\file_watcher\\logs\\file_watcher.info.{date.today()}.log',
                     filemode='a',
                     format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S',
                     level=logging.DEBUG)
+
 
 
 def index_files(directory):
