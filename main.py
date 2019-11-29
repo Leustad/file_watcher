@@ -28,7 +28,38 @@ def index_files(directory):
 def check_empty_dir(directory):
     for (dirpath, dirnames, filenames) in os.walk(directory):
         if len(dirnames) == 0 and len(filenames) == 0 and 'Deleted' not in dirpath:
-           rmtree(dirpath)
+            rmtree(dirpath)
+            logger.info(f'Removed emty dir: {dirpath}')
+
+
+def add_files(added):
+    for file in added:
+        destination_file = os.path.join(TARGET_1_DIR, os.path.join(file))
+        if '\\' in file:
+            destinatination_dir = os.path.join(TARGET_1_DIR, os.path.join(*file.split('\\')[:-1]))
+            os.makedirs(destinatination_dir, exist_ok=True)
+        destinatination_dir = os.path.join(TARGET_1_DIR, file)
+        source_dir = os.path.join(SOURCE_DIR, file)
+
+        copy2(source_dir, destinatination_dir)
+        logger.info(f'Added to: {destination_file}')
+
+
+def remove_files(deleted):
+    for file in deleted:
+        if 'Deleted' in file:
+            continue
+        if '\\' in file:
+            destinatination_dir = os.path.join(TRASHCAN, os.path.join(*file.split('\\')[:-1]))
+            os.makedirs(destinatination_dir, exist_ok=True)
+        move_from = os.path.join(TARGET_1_DIR, file)  
+        move_to = os.path.join(TRASHCAN, file)
+        
+        if os.path.exists(move_to):
+            move_to = os.path.join(TRASHCAN, f'{file}_#COPY#')
+        
+        os.rename(move_from, move_to)
+        logger.info(f'Deleted from: {move_from}')
 
 
 def main():
@@ -40,34 +71,11 @@ def main():
 
 
     if added:
-        for file in added:
-            destination_file = os.path.join(TARGET_1_DIR, os.path.join(file))
-            if '\\' in file:
-                destinatination_dir = os.path.join(TARGET_1_DIR, os.path.join(*file.split('\\')[:-1]))
-                os.makedirs(destinatination_dir, exist_ok=True)
-            destinatination_dir = os.path.join(TARGET_1_DIR, file)
-            source_dir = os.path.join(SOURCE_DIR, file)
-
-            copy2(source_dir, destinatination_dir)
-            logger.info(f'Added to: {destination_file}')
+        add_files(added)
 
     if deleted:
-        for file in deleted:
-            if 'Deleted' in file:
-                continue
-            if '\\' in file:
-                destinatination_dir = os.path.join(TRASHCAN, os.path.join(*file.split('\\')[:-1]))
-                os.makedirs(destinatination_dir, exist_ok=True)
-            move_from = os.path.join(TARGET_1_DIR, file)  
-            move_to = os.path.join(TRASHCAN, file)
-            
-            if os.path.exists(move_to):
-                move_to = os.path.join(TRASHCAN, f'{file}_#COPY#')
-            
-            os.rename(move_from, move_to)
-            logger.info(f'Deleted from: {move_from}')
-    
-    check_empty_dir(TARGET_1_DIR)
+        remove_files(deleted)
+        check_empty_dir(TARGET_1_DIR)
 
 if __name__ == "__main__":
     while True:
