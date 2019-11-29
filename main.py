@@ -69,7 +69,6 @@ def main():
     added = set(source_files).difference(set(target_files))
     deleted = set(target_files).difference(set(source_files))
 
-
     if added:
         add_files(added)
 
