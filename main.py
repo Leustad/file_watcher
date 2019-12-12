@@ -11,6 +11,7 @@ SOURCE_DIR = 'E:\\DEEPFREEZE\\'
 TARGET_1_DIR = '\\\\LEUSTAD-DATA\\Docs\\Personal\\'
 TRASHCAN = '\\\\LEUSTAD-DATA\\Docs\\Personal\\Deleted\\'
 
+
 logger = logging.getLogger('file_watcher')
 handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(handler)
@@ -21,67 +22,94 @@ logging.basicConfig(filename=f'E:\\Development\\Python\\file_watcher\\logs\\file
                     level=logging.DEBUG)
 
 
-
-def index_files(directory):
-    indexed = []
-    for (dirpath, dirnames, filenames) in os.walk(directory):
-        for filename in filenames:
-            indexed.append(os.path.join(dirpath, filename))
-    return indexed
-
-
-def check_empty_dir(directory):
-    for (dirpath, dirnames, filenames) in os.walk(directory):
-        if len(dirnames) == 0 and len(filenames) == 0 and 'Deleted' not in dirpath:
-            rmtree(dirpath)
-            logger.info(f'Removed emtpy dir: {dirpath}')
+class FileWatcher():
+    def __init__(self, source, target, trash_can, logger):
+        self.source = source
+        self.target = target
+        self.trash_can = trash_can
+        self.logger = logger
+        self.ctr = 0
 
 
-def add_files(added):
-    for file in added:
-        destination_file = os.path.join(TARGET_1_DIR, os.path.join(file))
-        if '\\' in file:
-            destinatination_dir = os.path.join(TARGET_1_DIR, os.path.join(*file.split('\\')[:-1]))
-            os.makedirs(destinatination_dir, exist_ok=True)
-        destinatination_dir = os.path.join(TARGET_1_DIR, file)
-        source_dir = os.path.join(SOURCE_DIR, file)
-
-        copy2(source_dir, destinatination_dir)
-        logger.info(f'Added to: {destination_file}')
+    def index_files(self, directory):
+        self.indexed = []
+        for (dirpath, dirnames, filenames) in os.walk(directory):
+            for filename in filenames:
+                self.indexed.append(os.path.join(dirpath, filename))
+        return self.indexed
 
 
-def remove_files(deleted):
-    for file in deleted:
-        if 'Deleted' in file:
-            continue
-        if '\\' in file:
-            destinatination_dir = os.path.join(TRASHCAN, os.path.join(*file.split('\\')[:-1]))
-            os.makedirs(destinatination_dir, exist_ok=True)
-        move_from = os.path.join(TARGET_1_DIR, file)  
-        move_to = os.path.join(TRASHCAN, file)
+    def add_files(self, added):
+        for file in added:
+            self.destination_file = os.path.join(self.target, os.path.join(file))
+            if '\\' in file:
+                self.destinatination_dir = os.path.join(self.target, os.path.join(*file.split('\\')[:-1]))
+                os.makedirs(self.destinatination_dir, exist_ok=True)
+            self.destinatination_dir = os.path.join(self.target, file)
+            self.source_dir = os.path.join(self.source, file)
+
+            copy2(self.source_dir, self.destinatination_dir)
+            self.logger.info(f'Added to: {self.destination_file}')
+
+
+    def remove_files(self, deleted):
+        self.ctr = 0
+        for file in deleted:
+            if 'Deleted' in file or 'Thumbs.db' in file:
+                continue
+            if '\\' in file:
+                self.destinatination_dir = os.path.join(self.trash_can, os.path.join(*file.split('\\')[:-1]))
+                os.makedirs(self.destinatination_dir, exist_ok=True)
+            self.move_from = os.path.join(self.target, file)  
+            self.move_to = os.path.join(self.trash_can, file)
+            
+            if os.path.exists(self.move_to):
+                self.move_to = os.path.join(self.trash_can, f'{file}_#COPY#')
+            
+            os.rename(self.move_from, self.move_to)
+            self.ctr += 1
+            self.logger.info(f'Deleted from: {self.move_from}')
+
+        return self.ctr
+
+
+    def check_empty_dir(self, directory):
+        self.files = os.listdir(directory)
+        if len(self.files):
+            for f in self.files:
+                if f == 'Deleted':
+                    continue
+                self.fullpath = os.path.join(directory, f)
+                if os.path.isdir(self.fullpath):
+                    self.check_empty_dir(self.fullpath)
+
+        # if folder empty, delete it
+        self.files = os.listdir(directory)
+        if len(self.files) == 0:
+            self.logger.info(f'Removed emtpy dir: {directory}')
+            os.rmdir(directory)
+
+
+    def execute(self):
+        self.source_files = [i.split(self.source)[1] for i in tqdm(self.index_files(self.source))]
+        self.target_files = [i.split(self.target)[1] for i in tqdm(self.index_files(self.target))]
+
+        self.added = set(self.source_files).difference(set(self.target_files))
+        self.deleted = set(self.target_files).difference(set(self.source_files))
+
+        self.logger.info('===== Summary =====')
+        if self.added:
+            self.add_files(self.added)
+            self.logger.info(f'Added: {len(self.added)} files')
+
+        if self.deleted:
+            self.deleted_count = self.remove_files(self.deleted)
+            self.logger.info(f'Deleted: {self.deleted_count} files')
+            self.check_empty_dir(self.target)
         
-        if os.path.exists(move_to):
-            move_to = os.path.join(TRASHCAN, f'{file}_#COPY#')
-        
-        os.rename(move_from, move_to)
-        logger.info(f'Deleted from: {move_from}')
+        self.logger.info('Cycle Completed !!')
 
-
-def main():
-    source_files = [i.split(SOURCE_DIR)[1] for i in tqdm(index_files(SOURCE_DIR))]
-    target_files = [i.split(TARGET_1_DIR)[1] for i in tqdm(index_files(TARGET_1_DIR))]
-
-    added = set(source_files).difference(set(target_files))
-    deleted = set(target_files).difference(set(source_files))
-
-    if added:
-        add_files(added)
-
-    if deleted:
-        remove_files(deleted)
-        check_empty_dir(TARGET_1_DIR)
 
 if __name__ == "__main__":
-    while True:
-        main()
-        time.sleep(360)
+    file_watcher = FileWatcher(SOURCE_DIR, TARGET_1_DIR, TRASHCAN, logger)
+    file_watcher.execute()

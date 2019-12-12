@@ -4,3 +4,4 @@ logs/
 destination/
 source/
 *.bat
+*.vbs
