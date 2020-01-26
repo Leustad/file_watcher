@@ -1,16 +1,16 @@
+import hashlib
 import logging
 import os
 import sys
 import time
 from datetime import date
-from shutil import copy2, rmtree
+from shutil import copy2
 
 from tqdm import tqdm
 
 SOURCE_DIR = 'E:\\DEEPFREEZE\\'
-TARGET_1_DIR = '\\\\LEUSTAD-DATA\\Docs\\Personal\\'
-TRASHCAN = '\\\\LEUSTAD-DATA\\Docs\\Personal\\Deleted\\'
-
+TARGETS = ['\\\\LEUSTAD-DATA\\Docs\\Personal\\']
+BLOCKSIZE = 65536
 
 logger = logging.getLogger('file_watcher')
 handler = logging.StreamHandler(sys.stdout)
@@ -21,95 +21,133 @@ logging.basicConfig(filename=f'E:\\Development\\Python\\file_watcher\\logs\\file
                     datefmt='%Y-%m-%d %H:%M:%S',
                     level=logging.DEBUG)
 
+start_time = time.time()
 
-class FileWatcher():
-    def __init__(self, source, target, trash_can, logger):
-        self.source = source
-        self.target = target
-        self.trash_can = trash_can
-        self.logger = logger
-        self.ctr = 0
 
+class FileCore:
+    _registry = {}
+
+    def __init__(self, path, name):
+        self._registry[name] = self
+        self.name = name
+        self.path = path
+        self.index = self.index_files(self.path)
+        
+    @classmethod
+    def by_name(cls, name):
+        return cls._registry[name]
+
+    @classmethod
+    def instance_keys(cls):
+        return cls._registry.keys()
+
+    @staticmethod    
+    def _get_hash(path):
+        with open(os.path.join(path), 'rb') as afile:
+            buf = afile.read(BLOCKSIZE)
+            hasher = hashlib.md5()
+            while len(buf) > 0:
+                hasher.update(buf)
+                buf = afile.read(BLOCKSIZE)
+        return hasher.hexdigest()
 
     def index_files(self, directory):
-        self.indexed = []
-        for (dirpath, dirnames, filenames) in os.walk(directory):
+        indexed = {}
+        for (dirpath, dirnames, filenames) in tqdm(os.walk(directory),  ascii=True, desc=f'os walk {directory}'):
             for filename in filenames:
-                self.indexed.append(os.path.join(dirpath, filename))
-        return self.indexed
+                if 'Deleted' not in dirpath:
+                    pathway = os.path.join(dirpath, filename)
+                    pathway = pathway.split(directory)[1]
+                    indexed[pathway] = self._get_hash(os.path.join(dirpath, filename))
+        return indexed
 
 
-    def add_files(self, added):
-        for file in added:
-            self.destination_file = os.path.join(self.target, os.path.join(file))
-            if '\\' in file:
-                self.destinatination_dir = os.path.join(self.target, os.path.join(*file.split('\\')[:-1]))
-                os.makedirs(self.destinatination_dir, exist_ok=True)
-            self.destinatination_dir = os.path.join(self.target, file)
-            self.source_dir = os.path.join(self.source, file)
+def init_objs():
+    """Initialize the path objects"""
+    FileCore(SOURCE_DIR, 'source')
+    for idx, val in enumerate(TARGETS):
+        FileCore(val, f'target_{idx}')
 
-            copy2(self.source_dir, self.destinatination_dir)
-            self.logger.info(f'Added to: {self.destination_file}')
+    val = time.time() - start_time
+    logger.info(f'Finished Initializing {val:.2f} seconds')
 
 
-    def remove_files(self, deleted):
-        self.ctr = 0
-        for file in deleted:
-            if 'Deleted' in file or 'Thumbs.db' in file:
+def copy_to_target(target, source, file_path, delete_source=False):
+    target_path = target
+    source_dir = os.path.join(source, file_path)
+    if not delete_source:
+        target_path = TARGETS[int(target.split('_')[1])]
+    target_dir = os.path.join(target_path, file_path)
+
+    if '\\' in file_path:
+        # Get target_dir without the file name
+        target_dir = os.path.join(target_path, os.path.join(*file_path.split('\\')[:-1]))
+        # Create the path if doesn't exist
+        os.makedirs(target_dir, exist_ok=True)
+        # Add the filename to the target_dir
+        target_dir = os.path.join(target_dir, *file_path.split('\\')[-1:])
+
+    if delete_source:
+        os.rename(source_dir, target_dir)
+        logger.info(f"Removed {source_dir}")
+    else:
+        copy2(source_dir, target_dir)
+        logger.info(f'Transferred {source_dir} to {target_dir}')
+
+
+def delete_empty_dir(directory):
+    files = os.listdir(directory)
+    if len(files):
+        for f in files:
+            if f == 'Deleted':
                 continue
-            if '\\' in file:
-                self.destinatination_dir = os.path.join(self.trash_can, os.path.join(*file.split('\\')[:-1]))
-                os.makedirs(self.destinatination_dir, exist_ok=True)
-            self.move_from = os.path.join(self.target, file)  
-            self.move_to = os.path.join(self.trash_can, file)
-            
-            if os.path.exists(self.move_to):
-                self.move_to = os.path.join(self.trash_can, f'{file}_#COPY#')
-            
-            os.rename(self.move_from, self.move_to)
-            self.ctr += 1
-            self.logger.info(f'Deleted from: {self.move_from}')
+            fullpath = os.path.join(directory, f)
+            if os.path.isdir(fullpath):
+                delete_empty_dir(fullpath)
 
-        return self.ctr
+    # if folder empty, delete it
+    files = os.listdir(directory)
+    if len(files) == 0:
+        logger.info(f'Removed emtpy dir: {directory}')
+        os.rmdir(directory)
 
 
-    def check_empty_dir(self, directory):
-        self.files = os.listdir(directory)
-        if len(self.files):
-            for f in self.files:
-                if f == 'Deleted':
-                    continue
-                self.fullpath = os.path.join(directory, f)
-                if os.path.isdir(self.fullpath):
-                    self.check_empty_dir(self.fullpath)
+def compare_resources():
+    source = FileCore.by_name('source')
+    target_names = [i for i in FileCore.instance_keys() if i != 'source']
 
-        # if folder empty, delete it
-        self.files = os.listdir(directory)
-        if len(self.files) == 0:
-            self.logger.info(f'Removed emtpy dir: {directory}')
-            os.rmdir(directory)
+    for target in target_names:
+        trashcan = os.path.join(FileCore.by_name(target).path, 'Deleted')
 
+        # Compare source -> targets
+        for path, hash_value in tqdm(source.index.items(), ascii=True, desc='Source -> Target'):
+            if 'Thumbs.db' in path:
+                continue
+            # Check if the file exist at the target
+            if not FileCore.by_name(target).index.get(path):
+                copy_to_target(target, SOURCE_DIR, path)
 
-    def execute(self):
-        self.source_files = [i.split(self.source)[1] for i in tqdm(self.index_files(self.source))]
-        self.target_files = [i.split(self.target)[1] for i in tqdm(self.index_files(self.target))]
+            # If file exists, check the hash
+            elif not FileCore.by_name(target).index[path] == hash_value:
+                logger.info(f'Hash mismatch: {path} source: {hash_value} copy: {FileCore.by_name(target).index[path]}')
+                copy_to_target(target, SOURCE_DIR, path)
 
-        self.added = set(self.source_files).difference(set(self.target_files))
-        self.deleted = set(self.target_files).difference(set(self.source_files))
+        # Compare Targets -> Source to detect deleted files
+        for path in tqdm(FileCore.by_name(target).index.keys(), ascii=True, desc='Target -> Source'):
+            if 'Thumbs.db' in path:
+                continue
+            if not source.index.get(path):
+                # Remove the file from the @target to 'Deleted' folder at the target
+                copy_to_target(target=trashcan,
+                               source=FileCore.by_name(target).path,
+                               file_path=path,
+                               delete_source=True)
 
-        self.logger.info('===== Summary =====')
-        if self.added:
-            self.add_files(self.added)
-            self.logger.info(f'Added: {len(self.added)} files')
-
-        if self.deleted:
-            self.deleted_count = self.remove_files(self.deleted)
-            self.logger.info(f'Deleted: {self.deleted_count} files')
-            self.check_empty_dir(self.target)
-        
-        self.logger.info('Cycle Completed !!')
+        delete_empty_dir(FileCore.by_name(target).path)
 
 
-if __name__ == "__main__":
-    file_watcher = FileWatcher(SOURCE_DIR, TARGET_1_DIR, TRASHCAN, logger)
-    file_watcher.execute()
+if __name__ == '__main__':
+    init_objs()
+    compare_resources()
+    val = time.time() - start_time
+    logger.info(f'Execution time {val:.2f} seconds')
